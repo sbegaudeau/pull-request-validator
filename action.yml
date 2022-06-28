@@ -1,11 +1,52 @@
-name: 'Your name here'
-description: 'Provide a description here'
-author: 'Your name or organization here'
-inputs:
-  milliseconds: # change this
-    required: true
-    description: 'input description here'
-    default: 'default value if applicable'
+name: 'Pull request validator'
+description: 'Used to perform some checks on pull requests'
+author: 'Stéphane Bégaudeau'
 runs:
-  using: 'node16'
-  main: 'dist/index.js'
+  using: "composite"
+  steps:
+    - name: Setup Node SDK
+      uses: actions/setup-node@v3
+      with:
+        node-version: 16.15.0
+    - name: Request the metadata of the pull request
+      uses: octokit/graphql-action@v2.2.20
+      id: pull_request_metadata
+      with:
+        query: |
+          query pull_request_metadata($id: ID!) { 
+            node(id: $id) {
+              ... on PullRequest {
+                title
+                commits(first: 50) {
+                  edges {
+                    node {
+                      commit {
+                        messageHeadline
+                      }
+                    }
+                  }
+                }
+                closingIssuesReferences(first: 50) {
+                  edges {
+                    node {
+                      title
+                      number
+                    }
+                  }
+                }
+                labels(first: 50) {
+                  edges {
+                    node {
+                      name
+                    }
+                  }
+                }
+              }
+            }
+          }
+        id: ${{ github.event.node_id }}
+    - name: Run the pull request validator
+      shell: bash
+      run: 'node dist/index.js'
+      env:
+        QUERY: ${{ steps.pull_request_metadata.outputs.data }}
